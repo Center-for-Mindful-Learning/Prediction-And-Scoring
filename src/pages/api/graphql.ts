@@ -537,94 +537,15 @@ class StampsModule {
   */
  const typeDefs = gql`
    type Query {
-     getUservotes(graph: String): [UserVote]
-     getVotesByTarget(targets: [String], collection: String): [Int]
-     updateVote(stampType: String, fromId: String, fromName: String, toId: String, toTarget: String, targetType: String, collection: String, negative: Boolean): Boolean
-     updateVoteForTarget(stampType: String, fromId: String, fromName: String, toId: String, toTarget: String, collection: String, negative: Boolean): Boolean
-     getUserStamps(user: String, collection: String): Float
      getContentScore(targets: [String]): [Float]
      getUserScore(user: String): Float
      saveVariable(user: String, proposalId: String, name: String, type: String, value: String) : Boolean
      calculateResult(user: String, proposalId: String, expression: String, collection: String): Float
      scoreUserByTag(user: String, collection: String, tag: String): Float
-     getContentPage(first: Int, after: String, contentType: String): ContentConnection
-   }
- 
-   type UserVote {
-     _id: ID!
-     user: String
-     sourceName: String
-     votedFor: String
-     targetTransaction: String
-     voteCount: Int
-     targetProposal: String
-   }
-
-
-   type ContentConnection {
-     edges: [ContentEdge]
-     pageInfo: PageInfo 
-   }
-
-   type ContentEdge {
-     node: String
-     cursor: String
-   }
-
-   type PageInfo {
-     hasPreviousPage: Boolean
-     hasNextPage: Boolean
-     startCursor: String
-     endCursor: String
    }
     `;
  const resolvers = {
    Query: {
-     getUservotes: async (obj, args, context, info) => {
-       const db = mongoose.connection;
-       const collection = db.collection("uservotes");
-        const filteredDocs = await collection.find({graph: args.graph}).toArray();
-       console.log(filteredDocs);
-       return filteredDocs;
-    },
-     
-     getVotesByTarget: async (obj, args, context, info) => {
-       const stamps = new StampsModule();
-       await stamps.init();
-       
-       let resultData = [] as any;
-       for (let i = 0; i < args.targets.length; i++) {
-         resultData.push(await stamps.utils.get_votes_by_transaction(args.targets[i], args.collection));
-       }
-       return resultData;
-     },
-     
-     updateVote: async (obj, args, context, info) => {
-       const stamps = new StampsModule();
-       await stamps.init();
-       if (! args.toTransaction) {
-           args.toTransaction = null;
-       }
-       if (! args.toProposal) {
-         args.toProposal = null;
-       }
-       const success = await stamps.update_vote(args.stampType, args.fromId, args.fromName, args.toId, args.toTarget, args.targetType, args.collection, args.negative); //req.query.negative is true in the case of a downvote, and false otherwise.
-         return success;
-     },
-     
-     updateVoteForTarget: async (obj, args, context, info) => {
-       const stamps = new StampsModule();
-       await stamps.init();
-       const success = await stamps.update_vote(args.stampType, args.fromId, args.fromName, args.toId, args.toTarget, args.collection, args.negative);
-         return success;
-     },
-     
-     getUserStamps: async (obj, args, context, info) => {
-       const stamps = new StampsModule();
-       await stamps.init();
-       let resultData = await stamps.get_user_stamps(args.user, args.collection);
-       return resultData;
-     },
      
 
      getContentScore: async (obj, args, context, info) => {
@@ -790,57 +711,6 @@ class StampsModule {
     db.collection("users").findOneAndUpdate({user: args.user, tag: args.tag, collection: args.collection}, {$set: {user: args.user, tag: args.tag, collection: args.collection, score: finalScore}}, {upsert: true});
     return finalScore;
   },
-  
-  getContentPage: async (obj, args, context, info) => {
-    let first = args.first;
-    let after = args.after;
-    let contentType = args.contentType;
-    const db = mongoose.connection;
-    let allContent = await db.collection("contents").find({contentType: contentType}).sort({createdAt: -1}).toArray();
-    let allEdges = allContent.map(function (item) { 
-      return {node: item._id, cursor: item.createdAt.toString()}
-    });
-
-
-    const applyCursorsToEdges = function(allEdges, after) {
-      let edges = allEdges;
-      let afterEdge = allEdges.filter(function(edge) { return edge.cursor == after})[0];
-      if (afterEdge) {
-        edges = edges.slice(edges.indexOf(afterEdge) + 1)
-      }
-      return edges;
-    }
-
-    const edgesToReturn = function(allEdges, first, after) {
-      let edges = applyCursorsToEdges(allEdges, after);
-      if(first){
-        if(first < 0) {
-          throw Error("First below zero!");
-        } else {
-          return edges.slice(0, first);
-        }
-      }
-
-      return edges;
-
-    }
-
-    let finalEdges = edgesToReturn(allEdges, first, after);
-
-    return {
-
-      edges: finalEdges,
-
-      pageInfo: {
-        startCursor: finalEdges[0].cursor,
-        endCursor: finalEdges[finalEdges.length - 1].cursor,
-        hasPreviousPage: allEdges.indexOf(finalEdges[0]) > first,
-        hasNextPage: allEdges.indexOf(finalEdges[finalEdges.length - 1]) < allEdges.length - first
-      }
-    }
-
-
-  }
     
  }
  };
